@@ -23,6 +23,7 @@ public class MoviesHandler extends BaseHttpHandler {
     private static final int MAX_TITLE_LENGTH = 100;
     private static final int MIN_YEAR_FOR_MOVIE = 1888;
     private final Gson gson;
+
     public MoviesHandler(MoviesStore store) {
         this.store = store;
         this.gson = new GsonBuilder()
