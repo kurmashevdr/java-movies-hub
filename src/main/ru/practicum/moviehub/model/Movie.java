@@ -16,4 +16,20 @@ public class Movie {
     public int getYear() {
         return year;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Movie movie = (Movie) o;
+        if (year != movie.year) return false;
+        return title.equals(movie.title);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = title.hashCode();
+        result = 31 * result + year;
+        return result;
+    }
 }

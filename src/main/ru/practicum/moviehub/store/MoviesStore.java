@@ -21,18 +21,11 @@ public class MoviesStore {
     }
 
     public Movie getMovie(int id) {
-        if (!movies.containsKey(id)) {
-            return null;
-        }
         return movies.get(id);
     }
 
-    public boolean removeMovie(int id) {
-        if (!movies.containsKey(id)) {
-            return false;
-        }
-        movies.remove(id);
-        return true;
+    public Movie removeMovie(int id) {
+        return movies.remove(id);
     }
 
     public boolean isEmpty() {

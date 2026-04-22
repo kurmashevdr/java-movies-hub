@@ -1,7 +1,7 @@
 package ru.practicum.moviehub.http;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import com.google.gson.GsonBuilder;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,15 +15,18 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class GetHandlerTest {
-    private static final String BASE = "http://localhost:8080";
+    private static final String BASE = "http://localhost:8080/movies";
     private static MoviesServer server;
     private static HttpClient client;
     private static MoviesStore store;
+    private static Gson gson;
 
     @BeforeAll
     static void beforeAll() throws InterruptedException {
@@ -33,6 +36,9 @@ public class GetHandlerTest {
         store = new MoviesStore();
         server = new MoviesServer(store);
         server.start();
+        gson = new GsonBuilder()
+                .serializeNulls()
+                .create();
     }
 
     @BeforeEach
@@ -50,7 +56,7 @@ public class GetHandlerTest {
     @Test
     void getMovies_whenEmpty_returnsEmptyArray() throws Exception {
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies"))
+                .uri(URI.create(BASE))
                 .GET()
                 .build();
         HttpResponse<String> resp =
@@ -60,9 +66,8 @@ public class GetHandlerTest {
                 resp.headers().firstValue("Content-Type").orElse("");
         assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue,
                 "Content-Type должен содержать формат данных и кодировку");
-        String body = resp.body().trim();
-        assertTrue(body.startsWith("[") && body.endsWith("]"),
-                "Ожидается JSON-массив");
+        List<?> array = gson.fromJson(resp.body(), List.class);
+        assertTrue(array.isEmpty(), "Ожидается пустой JSON-массив");
     }
 
     @Test
@@ -71,21 +76,19 @@ public class GetHandlerTest {
         store.addMovie("Movie 2", 2003);
         store.addMovie("Movie 3", 2004);
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies"))
+                .uri(URI.create(BASE))
                 .GET()
                 .build();
         HttpResponse<String> resp =
                 client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        Map<Integer, Movie> movies = store.getMovies();
-        Gson gson = new Gson();
-        String json = gson.toJson(movies, new MovieTypeToken().getType());
+        Map<Integer, Movie> expectedMovies = store.getMovies();
         assertEquals(200, resp.statusCode(), "GET /movies должен вернуть 200");
         String contentTypeHeaderValue =
                 resp.headers().firstValue("Content-Type").orElse("");
         assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue,
                 "Content-Type должен содержать формат данных и кодировку");
-        String body = resp.body().trim();
-        assertEquals(body, json, "Ожидается JSON-массив");
+        Map<Integer, Movie> actualMovies = gson.fromJson(resp.body(), new MovieTypeToken().getType());
+        assertEquals(expectedMovies, actualMovies, "Ожидается JSON-массив с фильмами");
     }
 
     @Test
@@ -95,20 +98,18 @@ public class GetHandlerTest {
         store.addMovie(movie);
         store.addMovie("Movie 3", 2004);
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies/2"))
+                .uri(URI.create(BASE + "/2"))
                 .GET()
                 .build();
         HttpResponse<String> resp =
                 client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        Gson gson = new Gson();
-        String json = gson.toJson(movie);
         assertEquals(200, resp.statusCode(), "GET /movies должен вернуть 200");
         String contentTypeHeaderValue =
                 resp.headers().firstValue("Content-Type").orElse("");
         assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue,
                 "Content-Type должен содержать формат данных и кодировку");
-        String body = resp.body().trim();
-        assertEquals(body, json, "Ожидается JSON-массив");
+        Movie actualMovie = gson.fromJson(resp.body(), Movie.class);
+        assertEquals(movie, actualMovie, "Ожидается фильм с id=2");
     }
 
     @Test
@@ -117,22 +118,20 @@ public class GetHandlerTest {
         store.addMovie("Movie 2", 2003);
         store.addMovie("Movie 3", 2004);
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies/4"))
+                .uri(URI.create(BASE + "/4"))
                 .GET()
                 .build();
         HttpResponse<String> resp =
                 client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        Gson gson = new Gson();
-        ErrorResponse errorResponse = new ErrorResponse("Not Found");
-        errorResponse.addDescription("Фильм с id=4 не найден");
-        String json = gson.toJson(errorResponse);
+        ErrorResponse expectedError = new ErrorResponse("Not Found");
+        expectedError.addDescription("Фильм с id=4 не найден");
         assertEquals(404, resp.statusCode(), "GET /movies должен вернуть 404");
         String contentTypeHeaderValue =
                 resp.headers().firstValue("Content-Type").orElse("");
         assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue,
                 "Content-Type должен содержать формат данных и кодировку");
-        String body = resp.body().trim();
-        assertEquals(body, json, "Ожидается JSON-массив c ошибкой");
+        ErrorResponse actualError = gson.fromJson(resp.body(), ErrorResponse.class);
+        assertEquals(expectedError, actualError, "Ожидается ошибка Not Found");
     }
 
     @Test
@@ -141,22 +140,20 @@ public class GetHandlerTest {
         store.addMovie("Movie 2", 2003);
         store.addMovie("Movie 3", 2004);
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies/asd"))
+                .uri(URI.create(BASE + "/asd"))
                 .GET()
                 .build();
         HttpResponse<String> resp =
                 client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        Gson gson = new Gson();
-        ErrorResponse errorResponse = new ErrorResponse("Bad Request");
-        errorResponse.addDescription("Некорректный ID");
-        String json = gson.toJson(errorResponse);
+        ErrorResponse expectedError = new ErrorResponse("Bad Request");
+        expectedError.addDescription("Некорректный ID");
         assertEquals(400, resp.statusCode(), "GET /movies должен вернуть 400");
         String contentTypeHeaderValue =
                 resp.headers().firstValue("Content-Type").orElse("");
         assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue,
                 "Content-Type должен содержать формат данных и кодировку");
-        String body = resp.body().trim();
-        assertEquals(body, json, "Ожидается JSON-массив c ошибкой");
+        ErrorResponse actualError = gson.fromJson(resp.body(), ErrorResponse.class);
+        assertEquals(expectedError, actualError, "Ожидается ошибка Bad Request");
     }
 
     @Test
@@ -168,23 +165,21 @@ public class GetHandlerTest {
         store.addMovie("Movie 3", 2004);
         int id4 = store.addMovie(movie4);
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies?year=2002"))
+                .uri(URI.create(BASE + "?year=2002"))
                 .GET()
                 .build();
         HttpResponse<String> resp =
                 client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        Gson gson = new Gson();
-        JsonObject response = new JsonObject();
-        response.add(gson.toJson(id1), gson.toJsonTree(movie1));
-        response.add(gson.toJson(id4), gson.toJsonTree(movie4));
-        String json = gson.toJson(response);
         assertEquals(200, resp.statusCode(), "GET /movies должен вернуть 200");
         String contentTypeHeaderValue =
                 resp.headers().firstValue("Content-Type").orElse("");
         assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue,
                 "Content-Type должен содержать формат данных и кодировку");
-        String body = resp.body().trim();
-        assertEquals(body, json, "Ожидается JSON-массив c фильмами");
+        Map<Integer, Movie> expected = new HashMap<>();
+        expected.put(id1, movie1);
+        expected.put(id4, movie4);
+        Map<Integer, Movie> actual = gson.fromJson(resp.body(), new MovieTypeToken().getType());
+        assertEquals(expected, actual, "Ожидается JSON-массив c фильмами 2002 года");
     }
 
     @Test
@@ -193,21 +188,19 @@ public class GetHandlerTest {
         store.addMovie("Movie 2", 2003);
         store.addMovie("Movie 3", 2004);
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies?year=asd"))
+                .uri(URI.create(BASE + "?year=asd"))
                 .GET()
                 .build();
         HttpResponse<String> resp =
                 client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        Gson gson = new Gson();
-        ErrorResponse errorResponse = new ErrorResponse("Bad Request");
-        errorResponse.addDescription("Некорректный параметр запроса — 'year'");
-        String json = gson.toJson(errorResponse);
         assertEquals(400, resp.statusCode(), "GET /movies должен вернуть 400");
         String contentTypeHeaderValue =
                 resp.headers().firstValue("Content-Type").orElse("");
         assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue,
                 "Content-Type должен содержать формат данных и кодировку");
-        String body = resp.body().trim();
-        assertEquals(body, json, "Ожидается JSON-массив c ошибкой");
+        ErrorResponse expectedError = new ErrorResponse("Bad Request");
+        expectedError.addDescription("Некорректный параметр запроса — 'year'");
+        ErrorResponse actualError = gson.fromJson(resp.body(), ErrorResponse.class);
+        assertEquals(expectedError, actualError, "Ожидается ошибка Bad Request");
     }
 }

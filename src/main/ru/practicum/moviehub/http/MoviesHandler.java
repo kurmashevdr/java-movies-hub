@@ -19,9 +19,15 @@ import java.util.Map;
 
 public class MoviesHandler extends BaseHttpHandler {
     private final MoviesStore store;
-
+    private static final int MAX_YEAR_FOR_MOVIE = 2027;
+    private static final int MAX_TITLE_LENGTH = 100;
+    private static final int MIN_YEAR_FOR_MOVIE = 1888;
+    private final Gson gson;
     public MoviesHandler(MoviesStore store) {
         this.store = store;
+        this.gson = new GsonBuilder()
+                .serializeNulls()
+                .create();
     }
 
     @Override
@@ -60,7 +66,6 @@ public class MoviesHandler extends BaseHttpHandler {
             sendJson(ex, 200, "[]");
         } else {
             Map<Integer, Movie> movies = store.getMovies();
-            Gson gson = new Gson();
             sendJson(ex, 200, gson.toJson(movies, new MovieTypeToken().getType()));
         }
     }
@@ -82,9 +87,6 @@ public class MoviesHandler extends BaseHttpHandler {
             if (movie == null) {
                 return;
             }
-            Gson gson = new GsonBuilder()
-                    .serializeNulls()
-                    .create();
             int id = store.addMovie(movie);
             JsonObject response = new JsonObject();
             response.addProperty("id", id);
@@ -102,11 +104,9 @@ public class MoviesHandler extends BaseHttpHandler {
         if (movie == null) {
             ErrorResponse errorResponse = new ErrorResponse("Not Found");
             errorResponse.addDescription("Фильм с id=" + id + " не найден");
-            Gson gson = new Gson();
             sendJson(ex, 404, gson.toJson(errorResponse));
             return;
         }
-        Gson gson = new Gson();
         sendJson(ex, 200, gson.toJson(movie));
     }
 
@@ -115,10 +115,12 @@ public class MoviesHandler extends BaseHttpHandler {
         if (id == null) {
             return;
         }
-        if (store.removeMovie(id)) {
+        if (store.removeMovie(id) != null) {
             sendNoContent(ex);
         } else {
-            sendJson(ex, 404, "Not Found");
+            ErrorResponse errorResponse = new ErrorResponse("Not Found");
+            errorResponse.addDescription("Фильм с id=" + id + " не найден");
+            sendJson(ex, 404, gson.toJson(errorResponse));
         }
     }
 
@@ -133,7 +135,6 @@ public class MoviesHandler extends BaseHttpHandler {
                 movies.put(id, movie);
             }
         });
-        Gson gson = new Gson();
         sendJson(ex, 200, gson.toJson(movies, new MovieTypeToken().getType()));
     }
 
@@ -152,7 +153,6 @@ public class MoviesHandler extends BaseHttpHandler {
         } catch (NumberFormatException e) {
             ErrorResponse errorResponse = new ErrorResponse("Bad Request");
             errorResponse.addDescription("Некорректный параметр запроса — 'year'");
-            Gson gson = new Gson();
             sendJson(ex, 400, gson.toJson(errorResponse));
             return null;
         }
@@ -172,7 +172,6 @@ public class MoviesHandler extends BaseHttpHandler {
         } catch (NumberFormatException e) {
             ErrorResponse errorResponse = new ErrorResponse("Bad Request");
             errorResponse.addDescription("Некорректный ID");
-            Gson gson = new Gson();
             sendJson(ex, 400, gson.toJson(errorResponse));
             return null;
         }
@@ -184,17 +183,16 @@ public class MoviesHandler extends BaseHttpHandler {
         try {
             byte[] bytes = in.readAllBytes();
             String body = new String(bytes, StandardCharsets.UTF_8);
-            Gson gson = new GsonBuilder().serializeNulls().create();
             Movie movie = gson.fromJson(body, Movie.class);
             boolean hasErrors = false;
             if (movie.getTitle() == null || movie.getTitle().isEmpty()) {
                 errorResponse.addDescription("Название фильма не может быть пустым");
                 hasErrors = true;
-            } else if (movie.getTitle().length() > 100) {
+            } else if (movie.getTitle().length() > MAX_TITLE_LENGTH) {
                 errorResponse.addDescription("Название фильма должно быть не более 100 символов");
                 hasErrors = true;
             }
-            if (movie.getYear() < 1888 || movie.getYear() > 2027) {
+            if (movie.getYear() < MIN_YEAR_FOR_MOVIE || movie.getYear() > MAX_YEAR_FOR_MOVIE) {
                 errorResponse.addDescription("Год фильма должен быть между 1888 и 2027");
                 hasErrors = true;
             }
@@ -209,7 +207,6 @@ public class MoviesHandler extends BaseHttpHandler {
         } catch (JsonSyntaxException e) {
             errorResponse.addDescription("Некорректный JSON");
             JsonObject response = new JsonObject();
-            Gson gson = new GsonBuilder().serializeNulls().create();
             response.addProperty("error", errorResponse.getError());
             response.add("description", gson.toJsonTree(errorResponse.getDescription()));
             sendJson(ex, 422, gson.toJson(response));
